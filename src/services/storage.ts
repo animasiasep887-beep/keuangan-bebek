@@ -1,0 +1,306 @@
+import type {
+  Kandang,
+  PopulasiBebek,
+  PakanItem,
+  PencatatanHarian,
+  KodeAkun,
+  TransaksiKeuangan,
+  AsetTetap,
+  HutangPiutang,
+  FarmMetricsSummary,
+} from '../types';
+
+import {
+  INITIAL_KANDANG,
+  INITIAL_POPULASI,
+  INITIAL_PAKAN,
+  INITIAL_KODE_AKUN,
+  INITIAL_ASET,
+  INITIAL_HUTANG_PIUTANG,
+  generateInitialPencatatanHarian,
+  generateInitialFinancialTransactions,
+} from './mockData';
+
+export type AppMode = 'REAL' | 'DEMO';
+
+const MODE_KEY = 'quack_active_mode';
+
+function getPrefix(mode?: AppMode): string {
+  const currentMode = mode || StorageService.getMode();
+  return currentMode === 'REAL' ? 'quack_real_' : 'quack_demo_';
+}
+
+function getStoredData<T>(key: string, fallback: T, mode?: AppMode): T {
+  try {
+    const fullKey = getPrefix(mode) + key;
+    const item = localStorage.getItem(fullKey);
+    return item !== null ? JSON.parse(item) : fallback;
+  } catch (error) {
+    console.error(`Error reading ${key} from LocalStorage:`, error);
+    return fallback;
+  }
+}
+
+function setStoredData<T>(key: string, data: T, mode?: AppMode): void {
+  try {
+    const fullKey = getPrefix(mode) + key;
+    localStorage.setItem(fullKey, JSON.stringify(data));
+  } catch (error) {
+    console.error(`Error writing ${key} to LocalStorage:`, error);
+  }
+}
+
+export const StorageService = {
+  // Mode Management ('REAL' vs 'DEMO')
+  getMode: (): AppMode => {
+    const stored = localStorage.getItem(MODE_KEY);
+    return (stored as AppMode) || 'REAL';
+  },
+
+  setMode: (newMode: AppMode) => {
+    localStorage.setItem(MODE_KEY, newMode);
+    StorageService.initStorage(newMode);
+  },
+
+  // Initialize both Real & Demo storage spaces safely if empty
+  initStorage: (modeOverride?: AppMode) => {
+    const mode = modeOverride || StorageService.getMode();
+    const prefix = getPrefix(mode);
+    const isInit = localStorage.getItem(`${prefix}initialized`);
+
+    if (!isInit) {
+      if (mode === 'REAL') {
+        const defaultKandang: Kandang[] = [
+          { id: 'k-1', namaKandang: 'Kandang 1 (Utama)', kapasitas: 1000, status: 'AKTIF', catatan: 'Unit kandang utama' },
+        ];
+        const defaultPopulasi: PopulasiBebek[] = [
+          {
+            id: 'pop-1',
+            kandangId: 'k-1',
+            kodeBatch: 'BATCH-01',
+            tglMasuk: new Date().toISOString().split('T')[0],
+            jumlahAwal: 500,
+            jumlahSaatIni: 500,
+            hargaBeliPerEkor: 75000,
+            umurMinggu: 24,
+            status: 'PRODUKTIF',
+          },
+        ];
+        const defaultPakan: PakanItem[] = [
+          { id: 'pak-1', namaPakan: 'Konsentrat Bebek Petelur K-99', merk: 'Standard', stokKg: 500, hargaPerKg: 8000, minStokKg: 100 },
+        ];
+
+        setStoredData('kandang', defaultKandang, 'REAL');
+        setStoredData('populasi', defaultPopulasi, 'REAL');
+        setStoredData('pakan', defaultPakan, 'REAL');
+        setStoredData('kode_akun', INITIAL_KODE_AKUN, 'REAL');
+        setStoredData('pencatatan_harian', [], 'REAL');
+        setStoredData('transaksi_keuangan', [], 'REAL');
+        setStoredData('aset_tetap', [], 'REAL');
+        setStoredData('hutang_piutang', [], 'REAL');
+        localStorage.setItem(`${prefix}initialized`, 'true');
+      } else {
+        setStoredData('kandang', INITIAL_KANDANG, 'DEMO');
+        setStoredData('populasi', INITIAL_POPULASI, 'DEMO');
+        setStoredData('pakan', INITIAL_PAKAN, 'DEMO');
+        setStoredData('kode_akun', INITIAL_KODE_AKUN, 'DEMO');
+        setStoredData('pencatatan_harian', generateInitialPencatatanHarian(), 'DEMO');
+        setStoredData('transaksi_keuangan', generateInitialFinancialTransactions(), 'DEMO');
+        setStoredData('aset_tetap', INITIAL_ASET, 'DEMO');
+        setStoredData('hutang_piutang', INITIAL_HUTANG_PIUTANG, 'DEMO');
+        localStorage.setItem(`${prefix}initialized`, 'true');
+      }
+    }
+  },
+
+  // Clear REAL Data only
+  clearRealData: () => {
+    const prefix = getPrefix('REAL');
+    localStorage.removeItem(`${prefix}initialized`);
+    localStorage.removeItem(`${prefix}kandang`);
+    localStorage.removeItem(`${prefix}populasi`);
+    localStorage.removeItem(`${prefix}pakan`);
+    localStorage.removeItem(`${prefix}pencatatan_harian`);
+    localStorage.removeItem(`${prefix}transaksi_keuangan`);
+    localStorage.removeItem(`${prefix}aset_tetap`);
+    localStorage.removeItem(`${prefix}hutang_piutang`);
+    StorageService.initStorage('REAL');
+  },
+
+  // Reset DEMO Data
+  resetDemoData: () => {
+    const prefix = getPrefix('DEMO');
+    localStorage.removeItem(`${prefix}initialized`);
+    StorageService.initStorage('DEMO');
+  },
+
+  // Getters
+  getKandang: (): Kandang[] => getStoredData('kandang', []),
+  getPopulasi: (): PopulasiBebek[] => getStoredData('populasi', []),
+  getPakan: (): PakanItem[] => getStoredData('pakan', []),
+  getPencatatanHarian: (): PencatatanHarian[] => getStoredData('pencatatan_harian', []),
+  getKodeAkun: (): KodeAkun[] => getStoredData('kode_akun', INITIAL_KODE_AKUN),
+  getTransaksi: (): TransaksiKeuangan[] => getStoredData('transaksi_keuangan', []),
+  getAset: (): AsetTetap[] => getStoredData('aset_tetap', []),
+  getHutangPiutang: (): HutangPiutang[] => getStoredData('hutang_piutang', []),
+
+  // Setters
+  saveKandang: (data: Kandang[]) => setStoredData('kandang', data),
+  savePopulasi: (data: PopulasiBebek[]) => setStoredData('populasi', data),
+  savePakan: (data: PakanItem[]) => setStoredData('pakan', data),
+  savePencatatanHarian: (data: PencatatanHarian[]) => setStoredData('pencatatan_harian', data),
+  saveTransaksi: (data: TransaksiKeuangan[]) => setStoredData('transaksi_keuangan', data),
+  saveAset: (data: AsetTetap[]) => setStoredData('aset_tetap', data),
+  saveHutangPiutang: (data: HutangPiutang[]) => setStoredData('hutang_piutang', data),
+
+  // DELETE METHODS (Permintaan Fitur Hapus)
+  deletePencatatanHarian: (id: string) => {
+    const logs = StorageService.getPencatatanHarian();
+    const updated = logs.filter((l) => l.id !== id);
+    StorageService.savePencatatanHarian(updated);
+  },
+
+  deleteTransaksiKeuangan: (id: string) => {
+    const trxs = StorageService.getTransaksi();
+    const updated = trxs.filter((t) => t.id !== id);
+    StorageService.saveTransaksi(updated);
+  },
+
+  deleteKandang: (id: string) => {
+    const list = StorageService.getKandang();
+    const updated = list.filter((k) => k.id !== id);
+    StorageService.saveKandang(updated);
+  },
+
+  deletePopulasi: (id: string) => {
+    const list = StorageService.getPopulasi();
+    const updated = list.filter((p) => p.id !== id);
+    StorageService.savePopulasi(updated);
+  },
+
+  deletePakan: (id: string) => {
+    const list = StorageService.getPakan();
+    const updated = list.filter((p) => p.id !== id);
+    StorageService.savePakan(updated);
+  },
+
+  deleteAset: (id: string) => {
+    const list = StorageService.getAset();
+    const updated = list.filter((a) => a.id !== id);
+    StorageService.saveAset(updated);
+  },
+
+  deleteHutangPiutang: (id: string) => {
+    const list = StorageService.getHutangPiutang();
+    const updated = list.filter((h) => h.id !== id);
+    StorageService.saveHutangPiutang(updated);
+  },
+
+  // Add Daily Harvest & automatically deduct feed + deduct population if dead/culls
+  addPencatatanHarian: (newLog: Omit<PencatatanHarian, 'id'>): PencatatanHarian => {
+    const logs = StorageService.getPencatatanHarian();
+    const created: PencatatanHarian = {
+      ...newLog,
+      id: `log-${Date.now()}`,
+    };
+
+    const updatedLogs = [created, ...logs];
+    StorageService.savePencatatanHarian(updatedLogs);
+
+    if (newLog.pakanId && newLog.pakanKg > 0) {
+      const pakanList = StorageService.getPakan();
+      const updatedPakan = pakanList.map((p) =>
+        p.id === newLog.pakanId
+          ? { ...p, stokKg: Math.max(0, p.stokKg - newLog.pakanKg) }
+          : p
+      );
+      StorageService.savePakan(updatedPakan);
+    }
+
+    const deadOrCulled = (newLog.bebekMati || 0) + (newLog.bebekAfkir || 0);
+    if (deadOrCulled > 0 && newLog.populasiId) {
+      const populasiList = StorageService.getPopulasi();
+      const updatedPop = populasiList.map((pop) =>
+        pop.id === newLog.populasiId
+          ? { ...pop, jumlahSaatIni: Math.max(0, pop.jumlahSaatIni - deadOrCulled) }
+          : pop
+      );
+      StorageService.savePopulasi(updatedPop);
+    }
+
+    return created;
+  },
+
+  // Add Financial Transaction
+  addTransaksiKeuangan: (newTrx: Omit<TransaksiKeuangan, 'id' | 'noRef'>): TransaksiKeuangan => {
+    const trxs = StorageService.getTransaksi();
+    const noRef = `TRX-${new Date().toISOString().slice(0, 10).replace(/-/g, '')}-${Math.floor(
+      100 + Math.random() * 900
+    )}`;
+
+    const created: TransaksiKeuangan = {
+      ...newTrx,
+      id: `trx-${Date.now()}`,
+      noRef,
+    };
+
+    const updated = [created, ...trxs];
+    StorageService.saveTransaksi(updated);
+    return created;
+  },
+
+  // Calculate High-level Dashboard Metrics
+  calculateMetrics: (): FarmMetricsSummary => {
+    const trxs = StorageService.getTransaksi();
+    const logs = StorageService.getPencatatanHarian();
+    const populasi = StorageService.getPopulasi();
+    const hpList = StorageService.getHutangPiutang();
+
+    let revenueSum = 0;
+    let expenseSum = 0;
+
+    trxs.forEach((t) => {
+      if (t.tipeTransaksi === 'PENDAPATAN') {
+        revenueSum += t.totalNominal;
+      } else if (t.tipeTransaksi === 'PENGELUARAN') {
+        expenseSum += t.totalNominal;
+      }
+    });
+
+    const saldoKas = revenueSum - expenseSum;
+    const labaRugiMtd = revenueSum - expenseSum;
+
+    const totalPopulasiHidup = populasi.reduce((acc, p) => acc + p.jumlahSaatIni, 0);
+
+    const latestLog = logs[0];
+    const hdpHariIni = latestLog ? latestLog.hdpPercentage : 0;
+    const totalTelurHariIni = latestLog
+      ? latestLog.telurUtuh + latestLog.telurRetak + latestLog.telurRusak
+      : 0;
+    const totalPakanKgHariIni = latestLog ? latestLog.pakanKg : 0;
+
+    const fcrAverage = logs.length > 0
+      ? Number((logs.reduce((acc, l) => acc + l.fcr, 0) / logs.length).toFixed(2))
+      : 0;
+
+    const totalPiutang = hpList
+      .filter((hp) => hp.jenis === 'PIUTANG' && hp.status === 'BELUM_LUNAS')
+      .reduce((acc, hp) => acc + hp.sisaNominal, 0);
+
+    const totalHutang = hpList
+      .filter((hp) => hp.jenis === 'HUTANG' && hp.status === 'BELUM_LUNAS')
+      .reduce((acc, hp) => acc + hp.sisaNominal, 0);
+
+    return {
+      saldoKas,
+      labaRugiMtd,
+      hdpHariIni,
+      totalPopulasiHidup,
+      totalTelurHariIni,
+      totalPakanKgHariIni,
+      fcrAverage,
+      totalPiutang,
+      totalHutang,
+    };
+  },
+};
